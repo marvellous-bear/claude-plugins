@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node */scripts/cli.js *)",
+      "Bash(node */scripts/daemon/index.js)"
+    ]
+  }
+}

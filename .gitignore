@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Windows reserved device names (created accidentally by some tools)
+**/nul
+
+# Local settings (not committed)
+.claude/settings.local.json
+.claude/.claude/
+
+# Temp files
+tmpclaude-*
+*.log

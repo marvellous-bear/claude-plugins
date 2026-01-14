@@ -1,0 +1,29 @@
+{
+  "name": "claude-afk",
+  "version": "0.1.0",
+  "description": "Remote notifications and responses for Claude Code sessions",
+  "main": "scripts/daemon/index.js",
+  "scripts": {
+    "test": "node --test scripts/cli.test.js scripts/permission-handler.test.js scripts/stop-handler.test.js scripts/daemon/index.test.js scripts/daemon/ipc.test.js scripts/daemon/sessions.test.js scripts/daemon/singleton.test.js scripts/daemon/telegram.test.js scripts/daemon/transcript.test.js hooks/session-start.test.js",
+    "test:watch": "node --test --watch scripts/cli.test.js scripts/permission-handler.test.js scripts/stop-handler.test.js scripts/daemon/index.test.js scripts/daemon/ipc.test.js scripts/daemon/sessions.test.js scripts/daemon/singleton.test.js scripts/daemon/telegram.test.js scripts/daemon/transcript.test.js hooks/session-start.test.js",
+    "test:integration": "node --test tests/integration/transcript-detection.test.js",
+    "test:all": "npm run test && npm run test:integration",
+    "test:coverage": "node --test --experimental-test-coverage scripts/cli.test.js scripts/permission-handler.test.js scripts/stop-handler.test.js scripts/daemon/index.test.js scripts/daemon/ipc.test.js scripts/daemon/sessions.test.js scripts/daemon/singleton.test.js scripts/daemon/telegram.test.js scripts/daemon/transcript.test.js hooks/session-start.test.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "plugin",
+    "telegram",
+    "notifications"
+  ],
+  "author": "Claude AFK Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "proper-lockfile": "^4.1.2",
+    "xpipe": "^1.0.5"
+  }
+}

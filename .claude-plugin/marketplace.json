@@ -1,0 +1,18 @@
+{
+  "name": "Claude AFK Plugins",
+  "version": "1.0.0",
+  "description": "Plugins for remote management and automation of Claude Code sessions",
+  "owner": {
+    "name": "marvellous-bear",
+    "url": "https://github.com/marvellous-bear"
+  },
+  "plugins": [
+    {
+      "name": "claude-afk",
+      "source": "./plugins/claude-afk",
+      "description": "Remote notifications and responses via Telegram",
+      "version": "0.1.0",
+      "license": "MIT"
+    }
+  ]
+}

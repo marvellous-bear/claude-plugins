@@ -1,0 +1,14 @@
+{
+  "name": "claude-afk",
+  "version": "0.1.0",
+  "description": "Remote notifications and responses for Claude Code sessions via Telegram",
+  "author": {
+    "name": "marvellous-bear",
+    "url": "https://github.com/marvellous-bear"
+  },
+  "repository": "https://github.com/marvellous-bear/claude-plugins",
+  "license": "MIT",
+  "keywords": ["telegram", "notifications", "remote", "afk", "permissions"],
+  "commands": "./commands",
+  "hooks": "./hooks/hooks.json"
+}
