@@ -33,7 +33,7 @@ const DEFAULT_CONFIG = {
   idleShutdownTimeout: 300,  // 5 minutes
   maxLogSizeBytes: 10485760, // 10MB
   maxLogFiles: 5,
-  bulkApprovalTools: ['Edit', 'Write'],  // Tools that support "all" approval
+  bulkApprovalTools: ['Edit', 'Write', 'Glob'],  // Tools that support "all" approval
   transcriptPolling: {
     enabled: true,
     intervalMs: 3000,

@@ -160,7 +160,7 @@ Create `~/.claude/claude-afk/config.json` to customize behavior:
 {
   "stopFollowupTimeout": 60,
   "pollingInterval": 2,
-  "bulkApprovalTools": ["Edit", "Write"]
+  "bulkApprovalTools": ["Edit", "Write", "Glob"]
 }
 ```
 
@@ -168,7 +168,7 @@ Create `~/.claude/claude-afk/config.json` to customize behavior:
 |--------|---------|-------------|
 | `stopFollowupTimeout` | `60` | Seconds to wait for follow-up after task completion |
 | `pollingInterval` | `2` | Seconds between Telegram API polls |
-| `bulkApprovalTools` | `["Edit", "Write"]` | Tools that support `all` response |
+| `bulkApprovalTools` | `["Edit", "Write", "Glob"]` | Tools that support `all` response |
 | `staleUpdateThreshold` | `300` | Ignore Telegram messages older than this (seconds) |
 | `allowSinglePendingFallback` | `false` | Allow non-reply messages when only one request is pending |
 
