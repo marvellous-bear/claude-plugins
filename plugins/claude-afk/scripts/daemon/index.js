@@ -845,11 +845,42 @@ async function createDaemon() {
 
     if (!replyToMessageId) {
       // Not a reply - check single pending fallback
-      if (config.allowSinglePendingFallback && waitingSockets.size === 1) {
+      const totalPendingRequests = Object.keys(state.pendingRequests).length;
+      if (config.allowSinglePendingFallback && totalPendingRequests === 1) {
         // Route to the only pending request
-        const [[messageId, waiting]] = waitingSockets.entries();
-        handleResponse(messageId, waiting, text);
-      } else if (waitingSockets.size > 0) {
+        const messageId = Object.keys(state.pendingRequests)[0];
+        const waiting = waitingSockets.get(Number(messageId));
+        const pending = state.pendingRequests[messageId];
+        
+        if (waiting) {
+          // Normal case: socket is alive, handle response
+          handleResponse(messageId, waiting, text);
+        } else if (pending) {
+          // Socket is dead but request still exists (resumed session scenario)
+          // Clean up the pending request and acknowledge the response
+          const decision = parsePermissionResponse(text, isBulkApprovalAllowed(pending.tool));
+          
+          if (decision) {
+            // Valid response - clean up and acknowledge
+            removeFromDualIndex(state, messageId, pending.sessionId);
+            saveState(state);
+            
+            // Delete the notification message
+            await telegram.deleteMessage(chatId, messageId).catch(() => {});
+            
+            // Inform user that the session is no longer active
+            await telegram.sendMessage(chatId,
+              '✅ Response recorded, but the session is no longer active. ' +
+              'If you resumed the session, you may need to re-run the command.'
+            );
+          } else {
+            // Invalid response
+            await telegram.sendMessage(chatId,
+              "Reply 'yes' or 'no'"
+            );
+          }
+        }
+      } else if (totalPendingRequests > 0) {
         await telegram.sendMessage(chatId,
           'Please reply directly to a notification message.'
         );
