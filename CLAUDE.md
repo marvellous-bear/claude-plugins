@@ -86,7 +86,7 @@ Users can respond with "all" to approve all future requests of that tool type fo
 **Config** (`config.json`):
 ```json
 {
-  "bulkApprovalTools": ["Edit", "Write"]  // default - tools that support "all"
+  "bulkApprovalTools": ["Edit", "Write", "Glob"]  // default - tools that support "all"
 }
 ```
 
