@@ -101,7 +101,7 @@ When Claude needs permission, you'll receive a message showing:
 - `no` or `n` — Deny this request
 - `all` — Approve this and all future requests of this type (for Edit/Write tools)
 
-> **Important:** You must use Telegram's reply feature (swipe right on mobile, right-click → Reply on desktop).
+> **Note:** When you have only one pending request, you can simply type your response without using the reply feature. For multiple pending requests, use Telegram's reply feature (swipe right on mobile, right-click → Reply on desktop).
 
 ### Task Completions
 
@@ -170,7 +170,7 @@ Create `~/.claude/claude-afk/config.json` to customize behavior:
 | `pollingInterval` | `2` | Seconds between Telegram API polls |
 | `bulkApprovalTools` | `["Edit", "Write"]` | Tools that support `all` response |
 | `staleUpdateThreshold` | `300` | Ignore Telegram messages older than this (seconds) |
-| `allowSinglePendingFallback` | `false` | Allow non-reply messages when only one request is pending |
+| `allowSinglePendingFallback` | `true` | Allow non-reply messages when only one request is pending |
 
 ---
 

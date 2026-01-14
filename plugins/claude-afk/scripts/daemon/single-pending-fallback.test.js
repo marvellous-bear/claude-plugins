@@ -27,15 +27,15 @@ describe('single pending fallback logic', () => {
     };
 
     // Simulate the logic from processUpdate
-    const totalPendingRequests = Object.keys(state.pendingRequests).length;
+    const pendingRequestCount = Object.keys(state.pendingRequests).length;
     
     // This should be true - we have one pending request
-    assert.strictEqual(totalPendingRequests, 1);
+    assert.strictEqual(pendingRequestCount, 1);
     assert.strictEqual(config.allowSinglePendingFallback, true);
     
     // The old code would check waitingSockets.size === 1 (which is 0)
-    // The new code checks totalPendingRequests === 1 (which is 1)
-    assert.strictEqual(totalPendingRequests === 1, true, 'Should detect single pending request');
+    // The new code checks pendingRequestCount === 1 (which is 1)
+    assert.strictEqual(pendingRequestCount === 1, true, 'Should detect single pending request');
   });
 
   it('should not route when multiple pending requests exist', () => {
@@ -61,11 +61,11 @@ describe('single pending fallback logic', () => {
       allowSinglePendingFallback: true
     };
 
-    const totalPendingRequests = Object.keys(state.pendingRequests).length;
+    const pendingRequestCount = Object.keys(state.pendingRequests).length;
     
     // Should not allow fallback with multiple pending requests
-    assert.strictEqual(totalPendingRequests > 1, true);
-    assert.strictEqual(totalPendingRequests === 1, false, 'Should not allow fallback with multiple requests');
+    assert.strictEqual(pendingRequestCount > 1, true);
+    assert.strictEqual(pendingRequestCount === 1, false, 'Should not allow fallback with multiple requests');
   });
 
   it('should not route when no pending requests exist', () => {
@@ -78,11 +78,11 @@ describe('single pending fallback logic', () => {
       allowSinglePendingFallback: true
     };
 
-    const totalPendingRequests = Object.keys(state.pendingRequests).length;
+    const pendingRequestCount = Object.keys(state.pendingRequests).length;
     
     // Should not allow fallback with no pending requests
-    assert.strictEqual(totalPendingRequests, 0);
-    assert.strictEqual(totalPendingRequests === 1, false, 'Should not allow fallback with no requests');
+    assert.strictEqual(pendingRequestCount, 0);
+    assert.strictEqual(pendingRequestCount === 1, false, 'Should not allow fallback with no requests');
   });
 
   it('should not route when feature is disabled', () => {
@@ -102,11 +102,11 @@ describe('single pending fallback logic', () => {
       allowSinglePendingFallback: false
     };
 
-    const totalPendingRequests = Object.keys(state.pendingRequests).length;
+    const pendingRequestCount = Object.keys(state.pendingRequests).length;
     
     // Should not allow fallback when disabled
     assert.strictEqual(config.allowSinglePendingFallback, false);
-    assert.strictEqual(config.allowSinglePendingFallback && totalPendingRequests === 1, false, 
+    assert.strictEqual(config.allowSinglePendingFallback && pendingRequestCount === 1, false, 
       'Should not allow fallback when feature is disabled');
   });
 });

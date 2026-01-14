@@ -845,8 +845,8 @@ async function createDaemon() {
 
     if (!replyToMessageId) {
       // Not a reply - check single pending fallback
-      const totalPendingRequests = Object.keys(state.pendingRequests).length;
-      if (config.allowSinglePendingFallback && totalPendingRequests === 1) {
+      const pendingRequestCount = Object.keys(state.pendingRequests).length;
+      if (config.allowSinglePendingFallback && pendingRequestCount === 1) {
         // Route to the only pending request
         const messageId = Object.keys(state.pendingRequests)[0];
         const waiting = waitingSockets.get(Number(messageId));
@@ -880,7 +880,7 @@ async function createDaemon() {
             );
           }
         }
-      } else if (totalPendingRequests > 0) {
+      } else if (pendingRequestCount > 0) {
         await telegram.sendMessage(chatId,
           'Please reply directly to a notification message.'
         );
