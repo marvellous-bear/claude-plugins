@@ -854,7 +854,7 @@ async function createDaemon() {
         
         if (waiting) {
           // Normal case: socket is alive, handle response
-          handleResponse(messageId, waiting, text);
+          handleResponse(Number(messageId), waiting, text);
         } else if (pending) {
           // Socket is dead but request still exists (resumed session scenario)
           // Clean up the pending request and acknowledge the response
