@@ -10,8 +10,8 @@ const net = require('net');
 const xpipe = require('xpipe');
 const crypto = require('crypto');
 
-// Default timeout for client requests (5 minutes - matches permission timeout)
-const DEFAULT_TIMEOUT = 300000;
+// Default timeout for client requests (1 hour - matches hooks.json timeout)
+const DEFAULT_TIMEOUT = 3600000;
 
 /**
  * Create an IPC server that listens on a named pipe

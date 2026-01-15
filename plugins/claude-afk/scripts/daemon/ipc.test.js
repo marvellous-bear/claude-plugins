@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { createIPCServer, createIPCClient, getDefaultPipePath } = require('./ipc.js');
+const { createIPCServer, createIPCClient, getDefaultPipePath, DEFAULT_TIMEOUT } = require('./ipc.js');
 
 describe('IPC communication', () => {
   let tempDir;
@@ -191,5 +191,19 @@ describe('IPC communication', () => {
     } else {
       assert.strictEqual(pipePath, '/tmp/claude-afk.sock');
     }
+  });
+
+  it('DEFAULT_TIMEOUT matches hooks.json timeout (1 hour)', () => {
+    // hooks.json specifies timeout: 3600 (seconds) for PermissionRequest and Stop hooks
+    // The IPC client DEFAULT_TIMEOUT must match this to avoid premature timeouts
+    // See: hooks/hooks.json lines 20 and 30
+    const HOOKS_TIMEOUT_SECONDS = 3600;
+    const EXPECTED_TIMEOUT_MS = HOOKS_TIMEOUT_SECONDS * 1000; // 3600000ms = 1 hour
+
+    assert.strictEqual(
+      DEFAULT_TIMEOUT,
+      EXPECTED_TIMEOUT_MS,
+      `DEFAULT_TIMEOUT (${DEFAULT_TIMEOUT}ms) should match hooks.json timeout (${EXPECTED_TIMEOUT_MS}ms / ${HOOKS_TIMEOUT_SECONDS}s)`
+    );
   });
 });
