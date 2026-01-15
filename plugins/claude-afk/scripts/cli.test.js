@@ -9,7 +9,8 @@ const {
   formatStatusOutput,
   formatEnableOutput,
   formatDisableOutput,
-  formatSetupOutput
+  formatSetupOutput,
+  waitForDaemon
 } = require('./cli.js');
 
 describe('CLI', () => {
@@ -344,6 +345,63 @@ describe('CLI', () => {
     it('formats fully configured status', () => {
       const output = formatSetupOutput({ configured: true });
       assert.ok(output.includes('ready') || output.includes('configured') || output.includes('complete'));
+    });
+  });
+
+  describe('waitForDaemon', () => {
+    it('returns ready=true when daemon connects on first attempt', async () => {
+      const mockClientFactory = async () => ({
+        close: async () => {}
+      });
+
+      const result = await waitForDaemon(mockClientFactory, { timeoutMs: 1000, intervalMs: 100 });
+
+      assert.strictEqual(result.ready, true);
+      assert.strictEqual(result.timedOut, false);
+    });
+
+    it('returns ready=true after retrying when daemon becomes available', async () => {
+      let attempts = 0;
+      const mockClientFactory = async () => {
+        attempts++;
+        if (attempts < 3) {
+          throw new Error('connect ENOENT');
+        }
+        return { close: async () => {} };
+      };
+
+      const result = await waitForDaemon(mockClientFactory, { timeoutMs: 5000, intervalMs: 100 });
+
+      assert.strictEqual(result.ready, true);
+      assert.strictEqual(result.timedOut, false);
+      assert.strictEqual(attempts, 3);
+    });
+
+    it('returns timedOut=true when daemon never becomes available', async () => {
+      const mockClientFactory = async () => {
+        throw new Error('connect ENOENT');
+      };
+
+      const result = await waitForDaemon(mockClientFactory, { timeoutMs: 500, intervalMs: 100 });
+
+      assert.strictEqual(result.ready, false);
+      assert.strictEqual(result.timedOut, true);
+    });
+
+    it('respects custom timeout and interval options', async () => {
+      let attempts = 0;
+      const mockClientFactory = async () => {
+        attempts++;
+        throw new Error('connect ENOENT');
+      };
+
+      const startTime = Date.now();
+      await waitForDaemon(mockClientFactory, { timeoutMs: 300, intervalMs: 100 });
+      const elapsed = Date.now() - startTime;
+
+      // Should have attempted roughly 3 times (300ms / 100ms interval)
+      assert.ok(attempts >= 2 && attempts <= 4, `Expected 2-4 attempts, got ${attempts}`);
+      assert.ok(elapsed >= 250 && elapsed < 500, `Expected ~300ms elapsed, got ${elapsed}ms`);
     });
   });
 });
