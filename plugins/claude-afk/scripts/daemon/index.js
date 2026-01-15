@@ -20,6 +20,42 @@ const { createTelegramClient, getBotToken } = require('./telegram');
 const { getLastClaudeMessage, getLastUserMessage, getLastToolUse, formatToolInput, findToolResult, findUserMessage, getLineCount, findSubagentTranscripts, getFileMtime } = require('./transcript');
 const { getClaudeAfkDir, getSessionsDir } = require('../session-lookup');
 
+// Track sessions that should skip their next stop hook
+// Used to avoid the "enable task complete" notification
+const skipNextStopSessions = new Set();
+
+/**
+ * Check if a session should skip its next stop request
+ * Consumes the flag (returns true only once)
+ * @param {string} sessionId - Session ID to check
+ * @returns {boolean} True if should skip (and clears flag)
+ */
+function shouldSkipStop(sessionId) {
+  if (skipNextStopSessions.has(sessionId)) {
+    skipNextStopSessions.delete(sessionId);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Mark a session to skip its next stop request
+ * Called when AFK is enabled to skip the "enable complete" notification
+ * @param {string} sessionId - Session ID to mark
+ */
+function markSkipNextStop(sessionId) {
+  skipNextStopSessions.add(sessionId);
+}
+
+/**
+ * Clear the skip flag for a session without consuming it
+ * Called when AFK is disabled to clean up
+ * @param {string} sessionId - Session ID to clear
+ */
+function clearSkipNextStop(sessionId) {
+  skipNextStopSessions.delete(sessionId);
+}
+
 // Default configuration
 const DEFAULT_CONFIG = {
   alwaysEnabled: false,
@@ -608,6 +644,17 @@ async function createDaemon() {
   async function handleStopRequest(msg, respond, socket) {
     const { session_id, terminal_id, transcript_path, cwd, request_id } = msg;
 
+    // Check if we should skip this stop (e.g., immediately after enabling AFK)
+    // This prevents the confusing "task complete" notification right after enable
+    if (shouldSkipStop(session_id)) {
+      respond({
+        type: 'response',
+        request_id,
+        status: 'not_enabled'  // Passthrough - let Claude proceed normally
+      });
+      return;
+    }
+
     // Check if AFK is enabled for this session
     if (!config.alwaysEnabled && !registry.isAfkEnabled(session_id)) {
       respond({
@@ -714,6 +761,11 @@ async function createDaemon() {
 
     registry.enableAfk(session_id);
 
+    // Mark session to skip the next stop hook (the "enable complete" notification)
+    // This prevents the confusing behavior where Claude waits for follow-up
+    // immediately after enabling AFK, before the user has given their actual task
+    markSkipNextStop(session_id);
+
     // Persist
     state.afkSessions = registry.getAfkEnabledSessions();
     saveState(state);
@@ -735,6 +787,9 @@ async function createDaemon() {
 
     // Clear any bulk approval whitelist for this session
     clearWhitelist(session_id);
+
+    // Clear any pending skip flag (cleanup)
+    clearSkipNextStop(session_id);
 
     // Persist
     state.afkSessions = registry.getAfkEnabledSessions();
@@ -1338,5 +1393,9 @@ module.exports = {
   formatPermissionNotification,
   formatStopNotification,
   parsePermissionResponse,
-  DEFAULT_CONFIG
+  DEFAULT_CONFIG,
+  // Skip first stop after enable
+  shouldSkipStop,
+  markSkipNextStop,
+  clearSkipNextStop
 };
