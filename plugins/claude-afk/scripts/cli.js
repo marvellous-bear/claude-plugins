@@ -54,8 +54,18 @@ function formatStatusOutput(status, currentSessionId) {
  * Format enable success output
  */
 function formatEnableOutput(sessionId, unreliable) {
-  let output = `AFK mode enabled for session ${sessionId.substring(0, 8)}...\n`;
-  output += 'You will receive Telegram notifications for permission requests.\n';
+  let output = `AFK mode enabled for session ${sessionId.substring(0, 8)}...\n\n`;
+
+  output += `You will receive Telegram notifications when:\n`;
+  output += `  - Claude needs permission approvals for tool usage\n`;
+  output += `  - Tasks are completed\n\n`;
+
+  output += `Reply "yes" or "no" directly to Telegram messages to respond.\n\n`;
+
+  output += `To disable AFK mode later, use /claude-afk:disable.\n\n`;
+
+  // Instruction for Claude about question format
+  output += `[For Claude: Avoid using AskUserQuestion tool while AFK - ask questions in narrative form instead.]\n`;
 
   if (unreliable) {
     output += '\nWarning: Using unreliable terminal ID (PID-based fallback).\n';
