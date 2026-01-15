@@ -721,6 +721,81 @@ describe('checkRequestExists (extracted function)', () => {
   });
 });
 
+describe('skip first stop after enable', () => {
+  it('should skip the first stop request immediately after enabling AFK', () => {
+    // When AFK is enabled, Claude finishes that task and Stop hook fires.
+    // But the user hasn't given their actual task yet, so we should skip
+    // this first stop and not send a Telegram notification.
+    //
+    // Flow:
+    // 1. User runs /claude-afk:enable
+    // 2. handleEnableAfk() is called -> should set skipNextStop flag
+    // 3. Claude finishes "enable" task
+    // 4. Stop hook fires, handleStopRequest() is called
+    // 5. Since skipNextStop is set, return 'not_enabled' (passthrough)
+    // 6. User gives actual task
+    // 7. Next stop hook should send notification normally
+
+    // This test verifies the behavior exists (it's tested through the daemon)
+    // but we need the actual implementation to make this pass
+    const { shouldSkipStop, markSkipNextStop, clearSkipNextStop } = require('./index');
+
+    // These functions should exist and work correctly
+    assert.strictEqual(typeof shouldSkipStop, 'function', 'shouldSkipStop function should be exported');
+    assert.strictEqual(typeof markSkipNextStop, 'function', 'markSkipNextStop function should be exported');
+    assert.strictEqual(typeof clearSkipNextStop, 'function', 'clearSkipNextStop function should be exported');
+  });
+
+  it('shouldSkipStop returns true only once after markSkipNextStop', () => {
+    const { shouldSkipStop, markSkipNextStop, clearSkipNextStop } = require('./index');
+
+    const sessionId = 'test-session-123';
+
+    // Initially should not skip
+    assert.strictEqual(shouldSkipStop(sessionId), false);
+
+    // Mark to skip next stop
+    markSkipNextStop(sessionId);
+
+    // First call should return true and clear the flag
+    assert.strictEqual(shouldSkipStop(sessionId), true);
+
+    // Second call should return false (flag already consumed)
+    assert.strictEqual(shouldSkipStop(sessionId), false);
+
+    // Clean up
+    clearSkipNextStop(sessionId);
+  });
+
+  it('clearSkipNextStop removes the flag without consuming it', () => {
+    const { shouldSkipStop, markSkipNextStop, clearSkipNextStop } = require('./index');
+
+    const sessionId = 'test-session-456';
+
+    markSkipNextStop(sessionId);
+    clearSkipNextStop(sessionId);
+
+    // After clearing, shouldSkipStop should return false
+    assert.strictEqual(shouldSkipStop(sessionId), false);
+  });
+
+  it('skipNextStop is independent per session', () => {
+    const { shouldSkipStop, markSkipNextStop, clearSkipNextStop } = require('./index');
+
+    const session1 = 'session-1';
+    const session2 = 'session-2';
+
+    markSkipNextStop(session1);
+
+    assert.strictEqual(shouldSkipStop(session1), true);
+    assert.strictEqual(shouldSkipStop(session2), false);
+
+    // Clean up
+    clearSkipNextStop(session1);
+    clearSkipNextStop(session2);
+  });
+});
+
 describe('daemon startup cleanup', () => {
   it('should clear both pendingRequests and requestsBySession on startup', () => {
     // This tests the bug: daemon clears pendingRequests but leaves stale requestsBySession
