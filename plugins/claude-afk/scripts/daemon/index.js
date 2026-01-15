@@ -330,6 +330,59 @@ async function createDaemon() {
   }
 
   /**
+   * Clean up orphaned requests from other sessions that were using the same terminal.
+   * This handles the race condition where a user resumes a different session in the
+   * same terminal before the transcript polling detects the session change.
+   *
+   * @param {string} terminalId - The terminal ID for the current request
+   * @param {string} currentSessionId - The session ID making the current request
+   */
+  async function cleanupOrphanedTerminalRequests(terminalId, currentSessionId) {
+    if (!terminalId) return;
+
+    // Find all pending requests from OTHER sessions using this terminal
+    const orphanedRequests = [];
+    for (const [messageId, request] of Object.entries(state.pendingRequests)) {
+      if (request.terminalId === terminalId && request.sessionId !== currentSessionId) {
+        orphanedRequests.push({ messageId, request });
+      }
+    }
+
+    if (orphanedRequests.length === 0) return;
+
+    // Clean up each orphaned request
+    for (const { messageId, request } of orphanedRequests) {
+      const numericMessageId = Number(messageId);
+
+      // Clear any pending timeouts
+      const waiting = waitingSockets.get(numericMessageId);
+      if (waiting?.timeout) {
+        clearTimeout(waiting.timeout);
+      }
+
+      // Delete Telegram message silently
+      if (state.chatId) {
+        await telegram.deleteMessage(state.chatId, numericMessageId).catch(() => {});
+      }
+
+      // Remove from waitingSockets
+      waitingSockets.delete(numericMessageId);
+
+      // Remove from dual-index
+      removeFromDualIndex(state, messageId, request.sessionId);
+    }
+
+    // Notify user once about the cleanup
+    if (orphanedRequests.length > 0 && state.chatId) {
+      await telegram.sendMessage(state.chatId,
+        '⚠️ Previous session ended - pending requests cleared'
+      ).catch(() => {});
+    }
+
+    saveState(state);
+  }
+
+  /**
    * Handle incoming IPC requests
    */
   function handleRequest(msg, respond, socket) {
@@ -444,6 +497,11 @@ async function createDaemon() {
       });
       return;
     }
+
+    // Clean up any orphaned requests from previous sessions on this terminal
+    // This handles the race condition where user resumes a different session
+    // before transcript polling detects the session change
+    await cleanupOrphanedTerminalRequests(terminal_id, session_id);
 
     // Check if tool is whitelisted for this session (bulk approval)
     if (isToolWhitelisted(session_id, tool_name)) {
@@ -627,6 +685,9 @@ async function createDaemon() {
       });
       return;
     }
+
+    // Clean up any orphaned requests from previous sessions on this terminal
+    await cleanupOrphanedTerminalRequests(terminal_id, session_id);
 
     // Get Claude context
     const claudeContext = await getLastClaudeMessage(transcript_path, { maxLength: 500 });

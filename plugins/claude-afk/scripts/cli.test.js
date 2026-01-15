@@ -70,10 +70,11 @@ describe('CLI', () => {
       assert.ok(result.warning, 'Should include warning about unreliable terminal ID');
     });
 
-    it('handles daemon connection error', async () => {
+    it('fails when no token configured and daemon not running', async () => {
       const cli = createCLI({
         getSessionId: () => 'sess-123',
         hasReliableTerminalId: () => true,
+        getBotToken: () => null, // No token configured
         createClient: async () => {
           throw new Error('Connection refused');
         }
@@ -82,7 +83,8 @@ describe('CLI', () => {
       const result = await cli.run(['enable']);
 
       assert.strictEqual(result.success, false);
-      assert.ok(result.message.includes('daemon') || result.message.includes('connect'));
+      // Without token, should suggest running setup
+      assert.ok(result.message.includes('setup') || result.message.includes('token'));
     });
   });
 
@@ -245,7 +247,8 @@ describe('CLI', () => {
         })
       });
 
-      const result = await cli.run(['setup']);
+      // Use wait: false to avoid 60-second timeout in CI
+      const result = await cli.setup({ wait: false });
 
       assert.strictEqual(result.success, true);
       assert.ok(result.instructions.includes('/start'));

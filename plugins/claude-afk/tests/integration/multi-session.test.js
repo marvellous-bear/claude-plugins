@@ -61,6 +61,11 @@ function createTelegramMock() {
 
     simulateReply(text, replyToMessageId, chatId = 12345) {
       replies.push({ text, replyTo: replyToMessageId, chatId });
+    },
+
+    // Simulate a non-reply message (for testing single-pending fallback)
+    simulateMessage(text, chatId = 12345) {
+      replies.push({ text, replyTo: null, chatId });
     }
   };
 }
@@ -72,12 +77,42 @@ function createTestDaemon(options = {}) {
   const pipePath = options.pipePath || path.join(os.tmpdir(), `claude-afk-multi-${Date.now()}.sock`);
   const telegram = options.telegram || createTelegramMock();
   const registry = createSessionRegistry();
-  const config = { alwaysEnabled: false, maxRetries: 3, stopFollowupTimeout: 2 };
+  const config = { alwaysEnabled: false, maxRetries: 3, stopFollowupTimeout: 2, allowSinglePendingFallback: true };
 
-  let state = { chatId: options.chatId || 12345, afkSessions: [], pendingRequests: {} };
+  // Extended state to track terminal_id for orphan cleanup testing
+  let state = { chatId: options.chatId || 12345, afkSessions: [], pendingRequests: {}, requestsBySession: {} };
   const server = createIPCServer(pipePath);
   const waitingSockets = new Map();
   let running = false;
+
+  /**
+   * Clean up orphaned requests from other sessions using the same terminal
+   */
+  function cleanupOrphanedTerminalRequests(terminalId, currentSessionId) {
+    if (!terminalId) return;
+
+    const orphanedMessageIds = [];
+    for (const [messageId, request] of Object.entries(state.pendingRequests)) {
+      if (request.terminalId === terminalId && request.sessionId !== currentSessionId) {
+        orphanedMessageIds.push(messageId);
+      }
+    }
+
+    for (const messageId of orphanedMessageIds) {
+      const numericId = Number(messageId);
+      waitingSockets.delete(numericId);
+      registry.removePendingByMessageId(numericId);
+      delete state.pendingRequests[messageId];
+      // Clean up requestsBySession
+      for (const [sessId, msgIds] of Object.entries(state.requestsBySession)) {
+        const idx = msgIds.indexOf(messageId);
+        if (idx > -1) {
+          msgIds.splice(idx, 1);
+          if (msgIds.length === 0) delete state.requestsBySession[sessId];
+        }
+      }
+    }
+  }
 
   function handleRequest(msg, respond, socket) {
     switch (msg.type) {
@@ -112,7 +147,7 @@ function createTestDaemon(options = {}) {
   }
 
   async function handlePermissionRequest(msg, respond) {
-    const { session_id, tool_name, message, transcript_path, cwd, request_id } = msg;
+    const { session_id, terminal_id, tool_name, message, transcript_path, cwd, request_id } = msg;
 
     if (!registry.isAfkEnabled(session_id)) {
       respond({ type: 'response', request_id, status: 'not_enabled' });
@@ -123,6 +158,9 @@ function createTestDaemon(options = {}) {
       respond({ type: 'response', request_id, status: 'not_configured' });
       return;
     }
+
+    // Clean up orphaned requests from previous sessions on this terminal
+    cleanupOrphanedTerminalRequests(terminal_id, session_id);
 
     const claudeContext = await getLastClaudeMessage(transcript_path, { maxLength: 500 });
     const projectSlug = path.basename(cwd || '.') || 'project';
@@ -141,6 +179,19 @@ function createTestDaemon(options = {}) {
         command: message,
         requestId: request_id
       });
+
+      // Track in state with terminal_id for orphan detection
+      const msgIdStr = String(result.message_id);
+      state.pendingRequests[msgIdStr] = {
+        sessionId: session_id,
+        terminalId: terminal_id,
+        tool: tool_name,
+        command: message
+      };
+      if (!state.requestsBySession[session_id]) {
+        state.requestsBySession[session_id] = [];
+      }
+      state.requestsBySession[session_id].push(msgIdStr);
 
       waitingSockets.set(result.message_id, {
         respond,
@@ -167,22 +218,43 @@ function createTestDaemon(options = {}) {
       if (chatId !== state.chatId) continue;
 
       const replyToMessageId = msg.reply_to_message?.message_id;
-      if (!replyToMessageId) continue;
+
+      // Handle non-reply messages with single-pending fallback
+      if (!replyToMessageId) {
+        if (config.allowSinglePendingFallback && waitingSockets.size === 1) {
+          // Route to the only pending request
+          const [[messageId, waiting]] = waitingSockets.entries();
+          handleResponse(messageId, waiting, text);
+        }
+        continue;
+      }
 
       const waiting = waitingSockets.get(replyToMessageId);
       if (!waiting) continue;
 
-      waitingSockets.delete(replyToMessageId);
+      handleResponse(replyToMessageId, waiting, text);
+    }
+  }
 
-      if (waiting.type === 'permission') {
-        const normalized = text.toLowerCase();
-        if (normalized === 'yes' || normalized === 'y') {
-          registry.removePendingByMessageId(replyToMessageId);
-          waiting.respond({ type: 'response', request_id: waiting.requestId, status: 'approved' });
-        } else if (normalized === 'no' || normalized === 'n') {
-          registry.removePendingByMessageId(replyToMessageId);
-          waiting.respond({ type: 'response', request_id: waiting.requestId, status: 'denied' });
-        }
+  function handleResponse(messageId, waiting, text) {
+    waitingSockets.delete(messageId);
+
+    // Clean up state tracking
+    const msgIdStr = String(messageId);
+    delete state.pendingRequests[msgIdStr];
+    if (state.requestsBySession[waiting.sessionId]) {
+      const idx = state.requestsBySession[waiting.sessionId].indexOf(msgIdStr);
+      if (idx > -1) state.requestsBySession[waiting.sessionId].splice(idx, 1);
+    }
+
+    if (waiting.type === 'permission') {
+      const normalized = text.toLowerCase();
+      if (normalized === 'yes' || normalized === 'y') {
+        registry.removePendingByMessageId(messageId);
+        waiting.respond({ type: 'response', request_id: waiting.requestId, status: 'approved' });
+      } else if (normalized === 'no' || normalized === 'n') {
+        registry.removePendingByMessageId(messageId);
+        waiting.respond({ type: 'response', request_id: waiting.requestId, status: 'denied' });
       }
     }
   }
@@ -528,5 +600,112 @@ describe('Integration: Multiple Sessions', () => {
 
     const permB = await permBPromise;
     assert.strictEqual(permB.status, 'approved');
+  });
+
+  it('cleans up orphaned requests when session changes on same terminal (race condition fix)', async () => {
+    // This test verifies the fix for the bug where:
+    // 1. Session A has a pending request on terminal T1
+    // 2. User resumes Session B on the same terminal T1
+    // 3. Session B makes a permission request
+    // 4. Without the fix, waitingSockets.size would be 2, blocking non-reply responses
+    // 5. With the fix, Session A's orphaned request is cleaned up first
+
+    daemon = createTestDaemon();
+    await daemon.start();
+
+    const client = await createIPCClient(daemon.pipePath);
+    clients.push(client);
+
+    // Enable both sessions (simulating the scenario)
+    await client.sendAndWait({
+      type: 'enable_afk',
+      request_id: 'enable-a',
+      session_id: 'session-A'
+    });
+
+    await client.sendAndWait({
+      type: 'enable_afk',
+      request_id: 'enable-b',
+      session_id: 'session-B'
+    });
+
+    // Session A makes a request on terminal T1
+    const permAPromise = client.sendAndWait({
+      type: 'permission_request',
+      request_id: 'perm-a',
+      session_id: 'session-A',
+      terminal_id: 'terminal-T1',  // Same terminal
+      tool_name: 'Bash',
+      message: 'session-a-command',
+      transcript_path: FIXTURE_TRANSCRIPT,
+      cwd: '/project-a'
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Verify Session A's request is pending
+    assert.strictEqual(daemon.getWaitingCount(), 1, 'Session A should have 1 pending request');
+
+    // Now Session B (resuming on same terminal T1) makes a request
+    // This should clean up Session A's orphaned request first
+    const permBPromise = client.sendAndWait({
+      type: 'permission_request',
+      request_id: 'perm-b',
+      session_id: 'session-B',
+      terminal_id: 'terminal-T1',  // Same terminal - triggers cleanup
+      tool_name: 'Write',
+      message: 'session-b-file.txt',
+      transcript_path: FIXTURE_TRANSCRIPT,
+      cwd: '/project-b'
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // With the fix, Session A's request should be cleaned up
+    // and only Session B's request should be pending
+    assert.strictEqual(daemon.getWaitingCount(), 1, 'Should have exactly 1 pending request after cleanup');
+
+    // Verify we can respond without direct reply (single-pending fallback)
+    daemon.telegram.simulateMessage('yes');  // Non-reply message
+    await daemon.processUpdates();
+
+    const permB = await permBPromise;
+    assert.strictEqual(permB.status, 'approved', 'Session B should be approved via non-reply message');
+  });
+
+  it('allows non-reply response when only one request is pending', async () => {
+    daemon = createTestDaemon();
+    await daemon.start();
+
+    const client = await createIPCClient(daemon.pipePath);
+    clients.push(client);
+
+    await client.sendAndWait({
+      type: 'enable_afk',
+      request_id: 'enable',
+      session_id: 'single-session'
+    });
+
+    // Make a single permission request
+    const permPromise = client.sendAndWait({
+      type: 'permission_request',
+      request_id: 'perm-single',
+      session_id: 'single-session',
+      terminal_id: 'terminal-1',
+      tool_name: 'Bash',
+      message: 'single-command',
+      transcript_path: FIXTURE_TRANSCRIPT,
+      cwd: '/project'
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+    assert.strictEqual(daemon.getWaitingCount(), 1);
+
+    // Respond without replying to the notification
+    daemon.telegram.simulateMessage('yes');
+    await daemon.processUpdates();
+
+    const perm = await permPromise;
+    assert.strictEqual(perm.status, 'approved', 'Should approve via non-reply when single pending');
   });
 });
