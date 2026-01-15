@@ -166,6 +166,33 @@ async function startDaemon() {
 }
 
 /**
+ * Wait for daemon to be ready (IPC connectable)
+ * @param {Function} clientFactory - Factory to create IPC client
+ * @param {Object} options - Options
+ * @param {number} options.timeoutMs - Max time to wait (default 10 seconds)
+ * @param {number} options.intervalMs - Polling interval (default 500ms)
+ * @returns {Promise<{ready: boolean, timedOut: boolean}>}
+ */
+async function waitForDaemon(clientFactory, options = {}) {
+  const timeoutMs = options.timeoutMs || 10000;
+  const intervalMs = options.intervalMs || 500;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const client = await clientFactory();
+      await client.close();
+      return { ready: true, timedOut: false };
+    } catch (err) {
+      // Daemon not ready yet, keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  return { ready: false, timedOut: true };
+}
+
+/**
  * Poll for daemon status until chat_id is configured or timeout
  * @param {Function} clientFactory - Factory to create IPC client
  * @param {Object} options - Options
@@ -280,8 +307,15 @@ function createCLI(options = {}) {
           };
         }
 
-        // Wait for daemon to initialize
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait for daemon to be ready (poll with retries)
+        const daemonReady = await waitForDaemon(clientFactory);
+        if (!daemonReady.ready) {
+          return {
+            success: false,
+            message: 'Daemon started but failed to become ready.\n' +
+                     'Check logs at ~/.claude/claude-afk/logs/ for errors.'
+          };
+        }
       }
 
       try {
@@ -531,5 +565,6 @@ module.exports = {
   formatSetupOutput,
   isDaemonRunning,
   startDaemon,
+  waitForDaemon,
   waitForPairing
 };
